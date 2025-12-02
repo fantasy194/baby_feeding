@@ -1,0 +1,40 @@
+version: '3.9'
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    volumes:
+      - frontend-dist:/dist
+    networks:
+      - baby
+    command: [ "bash", "-c", "cp -r /app/dist/* /dist && tail -f /dev/null" ]
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      - PORT=3000
+      - HOST=0.0.0.0
+      - FEED_INTERVAL_MINUTES=270
+      - MOCK_PIYOLOG=false
+      - PIYOLOG_USER_ID=F1D0D0A7-E6FA-4671-B388-93290BB10DFD-3
+      - PIYOLOG_BABY_ID=F1D0D0A7-E6FA-4671-B388-93290BB10DFD-3-1
+      - PIYOLOG_CLIENT_TOKEN=9597fca55bea9eb3b6777f5598d4279bd9127a7f5f24d23ace278f257fcf0e8c
+      - DEV_HTTP_DEBUG=true
+    volumes:
+      - frontend-dist:/usr/src/app/public
+    ports:
+      - "3000:3000"
+    depends_on:
+      - frontend
+    networks:
+      - baby
+
+networks:
+  baby:
+    driver: bridge
+
+volumes:
+  frontend-dist:

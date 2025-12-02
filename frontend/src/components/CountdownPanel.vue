@@ -1,14 +1,16 @@
 <template>
-  <div class="col-span-2 bg-white/5 rounded-xl p-4 flex flex-col justify-center border border-white/10">
-    <div class="text-sm uppercase opacity-70">下次喂奶倒计时</div>
-    <div class="text-6xl font-semibold mt-2 tracking-tight" :class="{ 'text-red-400': isOverdue }">{{ display }}</div>
-    <div class="text-xs opacity-70 mt-2">上次喂奶：{{ lastFeedText }}</div>
-    <div v-if="isOverdue" class="mt-3 text-red-200 font-semibold">已超时，请尽快喂奶</div>
+  <div class="w-full h-full flex flex-col justify-center gap-3">
+    <div class="text-base font-medium opacity-90">距离下次喂奶</div>
+    <div class="font-semibold tracking-tight leading-none countdown-text" :class="{ 'text-red-300': isOverdue }">{{ display }}</div>
+    <div class="text-sm opacity-90 flex items-center gap-2">
+      <span class="emoji">⌚</span> 上次：{{ lastFeedText }}
+    </div>
+    <div v-if="isOverdue" class="text-sm text-red-200 font-semibold">已超时，请尽快喂奶</div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watchEffect } from 'vue';
+import { computed, ref } from 'vue';
 import dayjs from 'dayjs';
 
 const props = defineProps<{ status: any }>();
@@ -35,3 +37,10 @@ const lastFeedText = computed(() => {
   return `${dayjs(f.timestamp).format('HH:mm')} · ${f.amount}ml`;
 });
 </script>
+
+<style scoped>
+.countdown-text {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  font-size: clamp(72px, 14vw, 140px);
+}
+</style>

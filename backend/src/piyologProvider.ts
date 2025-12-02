@@ -30,6 +30,7 @@ function mapPiyologEvent(ev: any): BabyEvent | null {
   // - amount > 0 => feed (type 2 or 3). type 3 or meta.subtype -> breast, otherwise formula.
   // - pee appears as type 7 in docs, but some users see pee as type 6; use amount==0 && type 7 as pee.
   // - poop: type 6 (amount 0) or type 2 with amount 0.
+  // - vitamin AD: type 25 (amount usually 0)
   if (ev.amount > 0 && (ev.type === 2 || ev.type === 3)) {
     const feed: FeedEvent = {
       ...base,
@@ -39,6 +40,10 @@ function mapPiyologEvent(ev: any): BabyEvent | null {
       memo: ev.memo
     };
     return feed;
+  }
+
+  if (ev.type === 25) {
+    return { ...base, type: 'vitamin' } as BabyEvent;
   }
 
   // from observed data: type 6 at 12:50 should be 尿尿, type 7 at 10:10 should be 拉屎 => swap
@@ -130,13 +135,24 @@ export async function submitEvent(event: BabyEvent, creds: PiyoLogCredentials = 
   const outerMinor = getServerMinorVersion() || 0;
 
   let payloadType: number;
-  if (event.type === 'feed') {
-    const feed = event as FeedEvent;
-    payloadType = feed.subtype === 'breast_bottle' ? 3 : 2;
-  } else if (event.type === 'pee') {
-    payloadType = 6; // 尿尿
-  } else { // poop
-    payloadType = 7; // 拉屎
+  switch (event.type) {
+    case 'feed': {
+      const feed = event as FeedEvent;
+      payloadType = feed.subtype === 'breast_bottle' ? 3 : 2;
+      break;
+    }
+    case 'pee':
+      payloadType = 6; // 尿尿
+      break;
+    case 'poop':
+      payloadType = 7; // 拉屎
+      break;
+    case 'vitamin':
+      payloadType = 25; // 维生素AD
+      break;
+    default:
+      payloadType = 25;
+      break;
   }
 
   const payloadEvent: any = {

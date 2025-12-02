@@ -33,6 +33,14 @@
           </select>
         </div>
         <div>
+          <label class="text-sm font-semibold">布局模式</label>
+          <select v-model="local.layoutPreference" class="input">
+            <option value="auto">自动</option>
+            <option value="bar">条形屏</option>
+            <option value="mobile">手机</option>
+          </select>
+        </div>
+        <div>
           <label class="text-sm font-semibold">时区</label>
           <select v-model="local.timezone" class="input">
             <option value="Asia/Shanghai">Asia/Shanghai</option>
@@ -54,6 +62,7 @@ const props = defineProps<{ settings?: any }>();
 const emit = defineEmits(['close', 'save']);
 const local = reactive(JSON.parse(JSON.stringify(props.settings || {
   theme: 'auto',
+  layoutPreference: 'auto',
   feedConfig: { intervalMinutes: 270, volumeStep: 10, volumeMin: 30, volumeMax: 180 }
 })));
 const save = () => emit('save', local as any);

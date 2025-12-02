@@ -22,6 +22,7 @@ export const DEV_HTTP_DEBUG = process.env.DEV_HTTP_DEBUG === 'true';
 export const DEFAULT_SETTINGS = {
   theme: 'auto' as const,
   timezone: process.env.TZ || 'Asia/Shanghai',
+  layoutPreference: 'auto' as const,
   feedConfig: {
     intervalMinutes: Number(process.env.FEED_INTERVAL_MINUTES || 270), // 4.5h
     volumeStep: Number(process.env.FEED_VOLUME_STEP || 10),

@@ -13,9 +13,11 @@ let syncState: SyncState = {
 let feedHistory: FeedEvent[] = [];
 let peeHistory: BabyEvent[] = [];
 let poopHistory: BabyEvent[] = [];
+let vitaminHistory: BabyEvent[] = [];
 let lastFeed: FeedEvent | undefined;
 let lastPee: BabyEvent | undefined;
 let lastPoop: BabyEvent | undefined;
+let lastVitamin: BabyEvent | undefined;
 
 export function getLastFeed() {
   return lastFeed;
@@ -29,50 +31,50 @@ export function getLastPoop() {
   return lastPoop;
 }
 
+export function getLastVitamin() {
+  return lastVitamin;
+}
+
 export function getServerMinorVersion() {
   return syncState.serverMinorVersion;
 }
 
-function updateLocal(events: BabyEvent[]) {
-  for (const ev of events) {
-    if (ev.type === 'feed') {
-      if (ev.deleted) {
-        feedHistory = removeByEventOrNearest(feedHistory, ev);
-      } else {
-        feedHistory.push(ev as FeedEvent);
-      }
-      if (feedHistory.length > 200) feedHistory = feedHistory.slice(-200);
-      lastFeed = feedHistory.reduce<FeedEvent | undefined>((acc, cur) => (!acc || cur.timestamp > acc.timestamp ? cur : acc), undefined);
-    } else if (ev.type === 'pee') {
-      if (ev.deleted) {
-        peeHistory = removeByEventOrNearest(peeHistory, ev);
-      } else {
-        peeHistory.push(ev);
-      }
-      if (peeHistory.length > 200) peeHistory = peeHistory.slice(-200);
-      lastPee = peeHistory.reduce<BabyEvent | undefined>((acc, cur) => (!acc || cur.timestamp > acc.timestamp ? cur : acc), undefined);
-    } else if (ev.type === 'poop') {
-      if (ev.deleted) {
-        poopHistory = removeByEventOrNearest(poopHistory, ev);
-      } else {
-        poopHistory.push(ev);
-      }
-      if (poopHistory.length > 200) poopHistory = poopHistory.slice(-200);
-      lastPoop = poopHistory.reduce<BabyEvent | undefined>((acc, cur) => (!acc || cur.timestamp > acc.timestamp ? cur : acc), undefined);
-    }
+function upsert<T extends BabyEvent>(list: T[], ev: T, limit = 400): T[] {
+  const idx = list.findIndex((e) => e.eventId === ev.eventId);
+  if (ev.deleted) {
+    if (idx >= 0) list.splice(idx, 1);
+    return list;
   }
+  if (idx >= 0) {
+    list[idx] = ev;
+  } else {
+    list.push(ev);
+  }
+  if (list.length > limit) list = list.slice(-limit);
+  return list;
 }
 
-function removeByEventOrNearest<T extends BabyEvent>(list: T[], ev: BabyEvent): T[] {
-  const byId = list.filter((e) => e.eventId === ev.eventId);
-  if (byId.length) {
-    return list.filter((e) => e.eventId !== ev.eventId);
+function recomputeLasts() {
+  lastFeed = feedHistory.reduce<FeedEvent | undefined>((acc, cur) => (!acc || cur.timestamp > acc.timestamp ? cur : acc), undefined);
+  lastPee = peeHistory.reduce<BabyEvent | undefined>((acc, cur) => (!acc || cur.timestamp > acc.timestamp ? cur : acc), undefined);
+  lastPoop = poopHistory.reduce<BabyEvent | undefined>((acc, cur) => (!acc || cur.timestamp > acc.timestamp ? cur : acc), undefined);
+  lastVitamin = vitaminHistory.reduce<BabyEvent | undefined>((acc, cur) => (!acc || cur.timestamp > acc.timestamp ? cur : acc), undefined);
+}
+
+function updateLocal(events: BabyEvent[]) {
+  const sorted = [...events].sort((a, b) => a.timestamp - b.timestamp);
+  for (const ev of sorted) {
+    if (ev.type === 'feed') {
+      feedHistory = upsert(feedHistory, ev as FeedEvent);
+    } else if (ev.type === 'pee') {
+      peeHistory = upsert(peeHistory, ev);
+    } else if (ev.type === 'poop') {
+      poopHistory = upsert(poopHistory, ev);
+    } else if (ev.type === 'vitamin') {
+      vitaminHistory = upsert(vitaminHistory, ev);
+    }
   }
-  // 如果服务器删除事件的 event_id 与本地提交不一致，尽量删除同类型且时间最接近的历史事件
-  const sorted = [...list].sort((a, b) => Math.abs(a.timestamp - ev.timestamp) - Math.abs(b.timestamp - ev.timestamp));
-  const candidate = sorted.find((e) => e.type === ev.type);
-  if (!candidate) return list;
-  return list.filter((e) => e !== candidate);
+  recomputeLasts();
 }
 
 async function performSync() {
@@ -104,7 +106,7 @@ async function bootstrapHistory() {
     cursor = first.serverMinorVersion - window;
   }
 
-  while (cursor > 0 && (!lastFeed || !lastPee || !lastPoop)) {
+  while (cursor > 0 && (!lastFeed || !lastPee || !lastPoop || !lastVitamin)) {
     const { events } = await syncFromPiyoLog(cursor);
     // ensure we only move cursor backward
     updateLocal(events);
@@ -129,6 +131,7 @@ export function getFrontendStatus() {
     lastFeed,
     lastPee: lastPee as any,
     lastPoop: lastPoop as any,
+    lastVitamin: lastVitamin as any,
     nextFeedDue,
     settings,
   };

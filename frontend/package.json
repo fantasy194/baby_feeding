@@ -10,7 +10,8 @@
   "dependencies": {
     "pinia": "^2.1.7",
     "vue": "^3.3.8",
-    "dayjs": "^1.11.10"
+    "dayjs": "^1.11.10",
+    "lottie-web": "^5.12.2"
   },
   "devDependencies": {
     "@types/node": "^20.10.5",

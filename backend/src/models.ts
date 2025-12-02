@@ -1,4 +1,4 @@
-export type EventType = 'feed' | 'pee' | 'poop';
+export type EventType = 'feed' | 'pee' | 'poop' | 'vitamin';
 
 export interface Baby {
   id: string; // platform baby id
@@ -15,6 +15,7 @@ export interface FeedConfig {
 export interface AppSettings {
   theme: 'auto' | 'light' | 'dark';
   timezone: string;
+  layoutPreference?: 'auto' | 'bar' | 'mobile';
   feedConfig: FeedConfig;
 }
 
@@ -36,10 +37,14 @@ export interface FeedEvent extends BabyEventBase {
 }
 
 export interface SimpleEvent extends BabyEventBase {
-  type: 'pee' | 'poop';
+  type: 'pee' | 'poop' | 'vitamin';
 }
 
-export type BabyEvent = FeedEvent | SimpleEvent;
+export interface VitaminEvent extends BabyEventBase {
+  type: 'vitamin';
+}
+
+export type BabyEvent = FeedEvent | SimpleEvent | VitaminEvent;
 
 export interface SyncState {
   serverMinorVersion: number;
@@ -47,6 +52,7 @@ export interface SyncState {
   lastFeed?: FeedEvent;
   lastPee?: SimpleEvent;
   lastPoop?: SimpleEvent;
+  lastVitamin?: SimpleEvent;
 }
 
 export interface PiyoLogCredentials {
@@ -62,6 +68,7 @@ export interface FrontendStatus {
   lastFeed?: FeedEvent;
   lastPee?: SimpleEvent;
   lastPoop?: SimpleEvent;
+  lastVitamin?: SimpleEvent;
   nextFeedDue: number; // epoch ms when alert fires
   settings: AppSettings;
 }

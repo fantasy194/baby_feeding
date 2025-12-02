@@ -14,5 +14,5 @@ import { computed, ref, watch } from 'vue';
 const props = defineProps<{ mode: 'bar' | 'mobile'; debug: boolean }>();
 const localDebug = ref(props.debug);
 watch(() => props.debug, v => localDebug.value = v);
-const btn = (m: 'bar' | 'mobile') => computed(() => `px-2 py-1 rounded ${props.mode === m ? 'bg-slate-700' : 'bg-slate-600/60'}`).value;
+const btn = (m: 'bar' | 'mobile') => computed(() => `px-2 py-1 rounded ${props.mode === m ? 'bg-white/30 text-white' : 'bg-white/10 text-white'}`).value;
 </script>

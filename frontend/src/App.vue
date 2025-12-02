@@ -1,9 +1,13 @@
 <template>
-  <div :class="[themeClass, 'min-h-screen flex flex-col']">
-    <div class="p-3 flex justify-between items-center text-sm bg-black/10 dark:bg-white/5 backdrop-blur">
+  <div :class="[themeClass, 'min-h-screen flex flex-col relative overflow-hidden']" :style="{ background: 'var(--bg)' }">
+    <div class="p-4 flex justify-between items-center text-sm bg-white/10 dark:bg-white/5 backdrop-blur">
       <div class="flex items-center gap-3">
         <span class="font-semibold">喂奶倒计时</span>
         <LayoutSwitcher :mode="layoutMode" :debug="debugMode" @toggle-debug="toggleDebug" @set-mode="setMode" />
+        <div v-if="debugMode" class="flex items-center gap-2">
+          <button class="px-2 py-1 text-xs rounded bg-white/20" @click="triggerOverlay('success')">测试成功动画</button>
+          <button class="px-2 py-1 text-xs rounded bg-white/20" @click="triggerOverlay('fail')">测试失败动画</button>
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <select class="theme-select" v-model="localTheme" @change="setTheme(localTheme)">
@@ -11,22 +15,26 @@
           <option value="light">白天</option>
           <option value="dark">夜间</option>
         </select>
-        <button class="px-3 py-1 rounded bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900" @click="openSettings = true">设置</button>
-        <span class="text-xs opacity-70">{{ status?.baby.alias }}</span>
+        <button class="px-3 py-1 rounded bg-white/30 text-white" @click="openSettings = true">设置</button>
+        <span class="text-xs opacity-80">{{ status?.baby.alias }}</span>
       </div>
     </div>
 
-    <div v-if="layoutMode === 'bar'" class="flex flex-row layout-bar bg-gradient-to-br from-slate-900 to-slate-800 text-white">
-      <div class="flex-1 grid grid-cols-3 gap-3 p-4">
-        <CountdownPanel :status="status" />
-        <StatusCards :status="status" />
+
+    <div v-if="layoutMode === 'bar'" class="grid grid-cols-[3fr_2fr] min-h-[400px] px-6 py-5 gap-6 relative">
+      <div class="flex flex-col gap-4">
+        <div class="w-full h-full">
+          <CountdownPanel :status="status" />
+        </div>
+        <StatusCards :status="status" variant="row" />
       </div>
-      <div class="w-80 p-4 bg-black/20 dark:bg-white/10 flex flex-col justify-center">
+      <div class="grid grid-rows-1">
         <ActionButtons @action="handleAction" />
       </div>
     </div>
 
-    <div v-else class="flex-1 bg-slate-900 text-white p-4 space-y-4">
+    <div v-else class="flex-1 p-4 space-y-4 relative">
+      <CountdownPanel :status="status" />
       <StatusCards :status="status" mobile />
       <ActionButtons mobile @action="handleAction" />
     </div>
@@ -40,6 +48,33 @@
     />
 
     <SettingsModal v-if="openSettings" :settings="status?.settings" @close="openSettings = false" @save="saveSettings" />
+
+    <transition name="fade">
+      <div v-if="overlayState" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50 overlay-blur">
+        <div class="flex flex-col items-center gap-3">
+          <LottiePlayer
+            ref="successRef"
+            v-if="overlayState === 'success'"
+            :key="overlayState + reloadKey"
+            :data="successAnim"
+            :width="overlayWidth"
+            :height="overlayHeight"
+            autoplay
+            @complete="onAnimComplete"
+          />
+          <LottiePlayer
+            ref="failRef"
+            v-else
+            :key="overlayState + reloadKey"
+            :data="failAnim"
+            :width="overlayWidth"
+            :height="overlayHeight"
+            autoplay
+            @complete="onAnimComplete"
+          />
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -51,6 +86,9 @@ import ActionButtons from './components/ActionButtons.vue';
 import VolumePickerModal from './components/VolumePickerModal.vue';
 import StatusCards from './components/StatusCards.vue';
 import SettingsModal from './components/SettingsModal.vue';
+import LottiePlayer from './components/LottiePlayer.vue';
+import successAnim from './animations/success_animation.json';
+import failAnim from './animations/fail_animation.json';
 
 interface FeedConfig {
   intervalMinutes: number;
@@ -58,14 +96,16 @@ interface FeedConfig {
   volumeMin: number;
   volumeMax: number;
 }
-interface AppSettings { theme: 'auto' | 'light' | 'dark'; timezone: string; feedConfig: FeedConfig }
-interface EventBase { eventId: string; babyId: string; userId: string; timestamp: number; createdAt: number; type: 'feed' | 'pee' | 'poop'; }
+interface AppSettings { theme: 'auto' | 'light' | 'dark'; timezone: string; layoutPreference?: 'auto' | 'bar' | 'mobile'; feedConfig: FeedConfig }
+interface EventBase { eventId: string; babyId: string; userId: string; timestamp: number; createdAt: number; type: 'feed' | 'pee' | 'poop' | 'vitamin'; }
 interface FeedEvent extends EventBase { type: 'feed'; amount: number; subtype: 'formula' | 'breast_bottle'; }
+interface SimpleEvent extends EventBase { type: 'pee' | 'poop' | 'vitamin' }
 interface StatusPayload {
   baby: { id: string; alias: string };
   lastFeed?: FeedEvent;
-  lastPee?: EventBase;
-  lastPoop?: EventBase;
+  lastPee?: SimpleEvent;
+  lastPoop?: SimpleEvent;
+  lastVitamin?: SimpleEvent;
   nextFeedDue: number;
   settings: AppSettings;
 }
@@ -78,17 +118,28 @@ const openSettings = ref(false);
 const lastVolume = ref(120);
 const pendingSubtype = ref<'formula' | 'breast_bottle'>('formula');
 const localTheme = ref<'auto' | 'light' | 'dark'>('auto');
+const overlayState = ref<'success' | 'fail' | null>(null);
+const reloadKey = ref(0);
+const successRef = ref<any>(null);
+const failRef = ref<any>(null);
+const overlayWidth = computed(() => layoutMode.value === 'bar' ? '70vh' : '80vw');
+const overlayHeight = computed(() => layoutMode.value === 'bar' ? '70vh' : '60vw');
 
 const themeClass = computed(() => {
   const mode = status.value?.settings.theme || localTheme.value;
-  if (mode === 'dark' || (mode === 'auto' && new Date().getHours() >= 19)) return 'dark bg-slate-900 text-white';
-  return 'bg-slate-50 text-slate-900';
+  if (mode === 'dark' || (mode === 'auto' && new Date().getHours() >= 19)) return 'theme-dark';
+  return 'theme-light';
 });
 
 function autoLayout() {
   if (debugMode.value) return;
+  const pref = status.value?.settings.layoutPreference || 'auto';
+  if (pref !== 'auto') {
+    layoutMode.value = pref;
+    return;
+  }
   const ratio = window.innerWidth / window.innerHeight;
-  layoutMode.value = ratio > 3 ? 'bar' : 'mobile';
+  layoutMode.value = ratio > 1 ? 'bar' : 'mobile';
 }
 
 function toggleDebug() {
@@ -98,7 +149,7 @@ function setMode(mode: 'bar' | 'mobile') {
   layoutMode.value = mode;
 }
 
-function handleAction(payload: { type: 'feed' | 'pee' | 'poop'; subtype?: 'formula' | 'breast_bottle' }) {
+function handleAction(payload: { type: 'feed' | 'pee' | 'poop' | 'vitamin'; subtype?: 'formula' | 'breast_bottle' }) {
   if (payload.type === 'feed') {
     pendingSubtype.value = payload.subtype || 'formula';
     showVolumePicker.value = true;
@@ -113,7 +164,7 @@ function confirmFeed(amount: number) {
   submitEvent({ type: 'feed', amount, subtype: pendingSubtype.value });
 }
 
-async function submitEvent(payload: { type: 'feed' | 'pee' | 'poop'; amount: number; subtype?: 'formula' | 'breast_bottle' }) {
+async function submitEvent(payload: { type: 'feed' | 'pee' | 'poop' | 'vitamin'; amount: number; subtype?: 'formula' | 'breast_bottle' }) {
   if (!status.value) return;
   const now = Date.now();
   const event = {
@@ -124,9 +175,15 @@ async function submitEvent(payload: { type: 'feed' | 'pee' | 'poop'; amount: num
     createdAt: now,
     type: payload.type,
     amount: payload.type === 'feed' ? payload.amount : 0,
-    subtype: payload.subtype || 'formula',
+    subtype: payload.type === 'feed' ? (payload.subtype || 'formula') : undefined,
   } as any;
-  await fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(event) });
+  try {
+    await fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(event) });
+    overlayState.value = 'success';
+  } catch (e) {
+    console.error('提交事件失败', e);
+    overlayState.value = 'fail';
+  }
 }
 
 function connectWs() {
@@ -142,10 +199,15 @@ function connectWs() {
 }
 
 async function fetchStatus() {
-  const res = await fetch('/api/status');
-  status.value = await res.json();
-  if (status.value?.lastFeed?.amount) {
-    lastVolume.value = status.value.lastFeed.amount;
+  try {
+    const res = await fetch('/api/status');
+    status.value = await res.json();
+    if (status.value?.lastFeed?.amount) {
+      lastVolume.value = status.value.lastFeed.amount;
+    }
+    localTheme.value = status.value?.settings.theme || 'auto';
+  } catch (e) {
+    console.error('获取状态失败', e);
   }
 }
 
@@ -160,6 +222,7 @@ onMounted(() => {
     if (e.key === '2') handleAction({ type: 'feed', subtype: 'breast_bottle' });
     if (e.key === '3') handleAction({ type: 'pee' });
     if (e.key === '4') handleAction({ type: 'poop' });
+    if (e.key === '5') handleAction({ type: 'vitamin' });
   });
 });
 
@@ -173,5 +236,17 @@ function setTheme(mode: 'auto' | 'light' | 'dark') {
   if (status.value) {
     saveSettings({ ...status.value.settings, theme: mode });
   }
+}
+
+function triggerOverlay(state: 'success' | 'fail') {
+  overlayState.value = state;
+  reloadKey.value++;
+}
+
+const successDuration = () => successRef.value?.getDuration() ?? 1.5;
+const failDuration = () => failRef.value?.getDuration() ?? 1.5;
+
+function onAnimComplete() {
+  overlayState.value = null;
 }
 </script>
